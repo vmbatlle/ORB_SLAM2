@@ -60,6 +60,9 @@ int main(int argc, char **argv)
     cout << "Start processing sequence ..." << endl;
     cout << "Images in the sequence: " << nImages << endl << endl;
 
+    ofstream f;
+    f.open("FrameKeyPoints.txt");
+
     // Main loop
     cv::Mat im;
     for(int ni=0; ni<nImages; ni++)
@@ -81,7 +84,7 @@ int main(int argc, char **argv)
 #endif
 
         // Pass the image to the SLAM system
-        SLAM.TrackMonocular(im,tframe);
+        cv::Mat Tcw = SLAM.TrackMonocular(im,tframe);
 
 #ifdef COMPILEDWITHC11
         std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
@@ -90,6 +93,27 @@ int main(int argc, char **argv)
 #endif
 
         double ttrack= std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
+
+        if (SLAM.GetTrackingState() == ORB_SLAM2::Tracking::OK) {
+            std::vector<cv::KeyPoint> mvKeysUn = SLAM.GetTrackedKeyPointsUn();
+            std::vector<ORB_SLAM2::MapPoint*> mvpMapPoints = SLAM.GetTrackedMapPoints();
+            const int n = mvKeysUn.size();
+            const int matches = std::count_if(mvpMapPoints.begin(), mvpMapPoints.end(), [](ORB_SLAM2::MapPoint* i) {return i != nullptr && i->Observations()>0;});
+            f << fixed;
+            f << setprecision(6) << ni << " " << tframe << " " << matches << endl;
+            for(int i=0;i<n;i++)
+            {
+                ORB_SLAM2::MapPoint* pMP = mvpMapPoints[i];
+                if(pMP)
+                {
+                    if(pMP->Observations()>0) {
+                        cv::Point2f pt = mvKeysUn[i].pt;
+                        cv::Mat pos = pMP->GetWorldPos();
+                        f << setprecision(7) << pt.x << " " << pt.y << " " << pos.at<float>(0) << " " << pos.at<float>(1) << " " << pos.at<float>(2) << endl;
+                    }
+                }
+            }
+        }
 
         vTimesTrack[ni]=ttrack;
 
@@ -103,6 +127,8 @@ int main(int argc, char **argv)
         if(ttrack<T)
             usleep((T-ttrack)*1e6);
     }
+
+    f.close();
 
     // Stop all threads
     SLAM.Shutdown();
