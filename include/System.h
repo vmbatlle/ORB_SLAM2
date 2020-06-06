@@ -54,7 +54,8 @@ public:
     enum eSensor{
         MONOCULAR=0,
         STEREO=1,
-        RGBD=2
+        RGBD=2,
+        MONODEPTH=3
     };
 
 public:
@@ -72,6 +73,12 @@ public:
     // Input depthmap: Float (CV_32F).
     // Returns the camera pose (empty if tracking fails).
     cv::Mat TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const double &timestamp);
+
+    // Process the given left frame. Depthmap must be registered to the frame.
+    // Input image: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
+    // Input depthmap: Float (CV_32F).
+    // Returns the camera pose (empty if tracking fails).
+    cv::Mat TrackMonodepth(const cv::Mat &im, const cv::Mat &depthmap, const double &timestamp);
 
     // Proccess the given monocular frame
     // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.

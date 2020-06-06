@@ -54,6 +54,9 @@ public:
     // Constructor for RGB-D cameras.
     Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth);
 
+    // Constructor for Monodepth cameras.
+    Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth, const float &minThDepth, const float &maxThDepth);
+
     // Constructor for Monocular cameras.
     Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth);
 
@@ -95,6 +98,9 @@ public:
     // Associate a "right" coordinate to a keypoint if there is valid depth in the depthmap.
     void ComputeStereoFromRGBD(const cv::Mat &imDepth);
 
+    // Associate a "right" coordinate to a keypoint if there is valid depth in the depthmap.
+    void ComputeStereoFromMonodepth(const cv::Mat &imDepth);
+
     // Backprojects a keypoint (if stereo/depth info available) into 3D world coordinates.
     cv::Mat UnprojectStereo(const int &i);
 
@@ -127,6 +133,12 @@ public:
     // Threshold close/far points. Close points are inserted from 1 view.
     // Far points are inserted as in the monocular case from 2 views.
     float mThDepth;
+
+    // Threshold valid/invalid points. Valid points are inserted from 1 view.
+    // Invalid points are inserted as in the monocular case from 2 views.
+    // This is used for Monodepth
+    float mMinThDepth;
+    float mMaxThDepth;
 
     // Number of KeyPoints.
     int N;

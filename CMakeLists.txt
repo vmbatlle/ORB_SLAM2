@@ -111,3 +111,8 @@ add_executable(mono_euroc
 Examples/Monocular/mono_euroc.cc)
 target_link_libraries(mono_euroc ${PROJECT_NAME})
 
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Mono-D)
+
+add_executable(monod_kitti
+Examples/Mono-D/monod_kitti.cc)
+target_link_libraries(monod_kitti ${PROJECT_NAME})

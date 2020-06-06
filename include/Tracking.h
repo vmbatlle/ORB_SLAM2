@@ -60,6 +60,7 @@ public:
     // Preprocess the input and call Track(). Extract features and performs stereo matching.
     cv::Mat GrabImageStereo(const cv::Mat &imRectLeft,const cv::Mat &imRectRight, const double &timestamp);
     cv::Mat GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp);
+    cv::Mat GrabImageMonodepth(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp);
     cv::Mat GrabImageMonocular(const cv::Mat &im, const double &timestamp);
 
     void SetLocalMapper(LocalMapping* pLocalMapper);
@@ -194,6 +195,11 @@ protected:
     // Points seen as close by the stereo/RGBD sensor are considered reliable
     // and inserted from just one frame. Far points requiere a match in two keyframes.
     float mThDepth;
+
+    // For Monodepth2 depth points
+    // use as MONO points nearer than `minThDepth` or farther than `maxThDepth`
+    float minThDepth;
+    float maxThDepth;
 
     // For RGB-D inputs only. For some datasets (e.g. TUM) the depthmap values are scaled.
     float mDepthMapFactor;

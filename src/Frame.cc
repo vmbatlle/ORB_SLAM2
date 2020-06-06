@@ -170,6 +170,61 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeSt
     AssignFeaturesToGrid();
 }
 
+Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth, const float &minThDepth, const float &maxThDepth)
+    :mpORBvocabulary(voc),mpORBextractorLeft(extractor),mpORBextractorRight(static_cast<ORBextractor*>(NULL)),
+     mTimeStamp(timeStamp), mK(K.clone()),mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth), mMinThDepth(minThDepth), mMaxThDepth(maxThDepth)
+{
+    // Copied from RGB-D constructor
+
+    // Frame ID
+    mnId=nNextId++;
+
+    // Scale Level Info
+    mnScaleLevels = mpORBextractorLeft->GetLevels();
+    mfScaleFactor = mpORBextractorLeft->GetScaleFactor();    
+    mfLogScaleFactor = log(mfScaleFactor);
+    mvScaleFactors = mpORBextractorLeft->GetScaleFactors();
+    mvInvScaleFactors = mpORBextractorLeft->GetInverseScaleFactors();
+    mvLevelSigma2 = mpORBextractorLeft->GetScaleSigmaSquares();
+    mvInvLevelSigma2 = mpORBextractorLeft->GetInverseScaleSigmaSquares();
+
+    // ORB extraction
+    ExtractORB(0,imGray);
+
+    N = mvKeys.size();
+
+    if(mvKeys.empty())
+        return;
+
+    UndistortKeyPoints();
+
+    ComputeStereoFromMonodepth(imDepth);
+
+    mvpMapPoints = vector<MapPoint*>(N,static_cast<MapPoint*>(NULL));
+    mvbOutlier = vector<bool>(N,false);
+
+    // This is done only for the first Frame (or after a change in the calibration)
+    if(mbInitialComputations)
+    {
+        ComputeImageBounds(imGray);
+
+        mfGridElementWidthInv=static_cast<float>(FRAME_GRID_COLS)/static_cast<float>(mnMaxX-mnMinX);
+        mfGridElementHeightInv=static_cast<float>(FRAME_GRID_ROWS)/static_cast<float>(mnMaxY-mnMinY);
+
+        fx = K.at<float>(0,0);
+        fy = K.at<float>(1,1);
+        cx = K.at<float>(0,2);
+        cy = K.at<float>(1,2);
+        invfx = 1.0f/fx;
+        invfy = 1.0f/fy;
+
+        mbInitialComputations=false;
+    }
+
+    mb = mbf/fx;
+
+    AssignFeaturesToGrid();
+}
 
 Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth)
     :mpORBvocabulary(voc),mpORBextractorLeft(extractor),mpORBextractorRight(static_cast<ORBextractor*>(NULL)),
@@ -656,6 +711,31 @@ void Frame::ComputeStereoFromRGBD(const cv::Mat &imDepth)
         const float d = imDepth.at<float>(v,u);
 
         if(d>0)
+        {
+            mvDepth[i] = d;
+            mvuRight[i] = kpU.pt.x-mbf/d;
+        }
+    }
+}
+
+void Frame::ComputeStereoFromMonodepth(const cv::Mat &imDepth)
+{
+    // Copied from ComputeStereoFromRGBD()
+
+    mvuRight = vector<float>(N,-1);
+    mvDepth = vector<float>(N,-1);
+
+    for(int i=0; i<N; i++)
+    {
+        const cv::KeyPoint &kp = mvKeys[i];
+        const cv::KeyPoint &kpU = mvKeysUn[i];
+
+        const float &v = kp.pt.y;
+        const float &u = kp.pt.x;
+
+        const float d = imDepth.at<float>(v,u);
+
+        if(d>mMinThDepth && d<mMaxThDepth)
         {
             mvDepth[i] = d;
             mvuRight[i] = kpU.pt.x-mbf/d;
