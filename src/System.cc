@@ -217,7 +217,7 @@ cv::Mat System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const doub
     return Tcw;
 }
 
-cv::Mat System::TrackMonodepth(const cv::Mat &im, const cv::Mat &depthmap, const double &timestamp)
+cv::Mat System::TrackMonodepth(const cv::Mat &im, const double &timestamp)
 {
     // Copied from TrackRGBD()
 
@@ -261,7 +261,7 @@ cv::Mat System::TrackMonodepth(const cv::Mat &im, const cv::Mat &depthmap, const
     }
     }
 
-    cv::Mat Tcw = mpTracker->GrabImageMonodepth(im,depthmap,timestamp);
+    cv::Mat Tcw = mpTracker->GrabImageMonodepth(im,timestamp);
 
     unique_lock<mutex> lock2(mMutexState);
     mTrackingState = mpTracker->mState;

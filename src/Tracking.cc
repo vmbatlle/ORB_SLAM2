@@ -134,10 +134,6 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     if(sensor==System::STEREO || sensor==System::RGBD || sensor==System::MONODEPTH)
     {
         mThDepth = mbf*(float)fSettings["ThDepth"]/fx;
-        if (sensor==System::MONODEPTH) {
-            minThDepth = (float)fSettings["MinThDepth"];
-            maxThDepth = (float)fSettings["MaxThDepth"];
-        }
         cout << endl << "Depth Threshold (Close/Far Points): " << mThDepth << endl;
     }
 
@@ -148,6 +144,18 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
             mDepthMapFactor=1;
         else
             mDepthMapFactor = 1.0f/mDepthMapFactor;
+    }
+
+    if(sensor==System::MONODEPTH) {
+        encoder = torch::jit::load(fSettings["Monodepth.EncoderModel"]);
+        encoder.to(at::kCUDA);
+        decoder = torch::jit::load(fSettings["Monodepth.DecoderModel"]);
+        decoder.to(at::kCUDA);
+        modelSize = cv::Size((float)fSettings["Monodepth.ModelWidth"], 
+                             (float)fSettings["Monodepth.ModelHeight"]);
+        minThDepth = (float)fSettings["Monodepth.MinThDepth"];
+        maxThDepth = (float)fSettings["Monodepth.MaxThDepth"];
+        overestimationFactor = (float)fSettings["Monodepth.OverestimationFactor"];
     }
 
 }
@@ -238,12 +246,11 @@ cv::Mat Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const d
     return mCurrentFrame.mTcw.clone();
 }
 
-cv::Mat Tracking::GrabImageMonodepth(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp)
+cv::Mat Tracking::GrabImageMonodepth(const cv::Mat &imRGB, const double &timestamp)
 {
     // Copied from GrabImageRGBD()
 
     mImGray = imRGB;
-    cv::Mat imDepth = imD;
 
     if(mImGray.channels()==3)
     {
@@ -259,6 +266,30 @@ cv::Mat Tracking::GrabImageMonodepth(const cv::Mat &imRGB,const cv::Mat &imD, co
         else
             cvtColor(mImGray,mImGray,CV_BGRA2GRAY);
     }
+
+    cv::Mat imBGR = imRGB;
+
+    if(imBGR.channels()==1)
+    {
+        cvtColor(imBGR,imBGR,CV_GRAY2BGR);
+    }
+    else if(imBGR.channels()==4)
+    {
+        if(mbRGB)
+            cvtColor(imBGR,imBGR,CV_RGBA2BGR);
+        else
+            cvtColor(imBGR,imBGR,CV_BGRA2BGR);
+    }
+
+    cv::Mat imDepth;
+    forwardCNN(imBGR, imDepth); // get predicted DISPARITY
+    imDepth = 1.0f / imDepth; // convert disparity to DEPTH
+    // Uses a scale factor of 5.4 due to:
+    //     A. KITTI real baseline is 0.54m (training set)
+    //     B. Monodepth2 NN train baseline is 0.1m
+    imDepth *= 5.4f * overestimationFactor;
+    cv::threshold(imDepth, imDepth, 1e-3, 0.0, cv::THRESH_TOZERO); // value recommended by Niantic
+    cv::threshold(imDepth, imDepth, 800.0, 0.0, cv::THRESH_TRUNC); // value recommended by Niantic
 
     if((fabs(mDepthMapFactor-1.0f)>1e-5) || imDepth.type()!=CV_32F)
         imDepth.convertTo(imDepth,CV_32F,mDepthMapFactor);
@@ -1535,6 +1566,31 @@ bool Tracking::Relocalization()
         return true;
     }
 
+}
+
+void Tracking::forwardCNN(const cv::Mat& imRGB, cv::Mat& disp) {
+    cv::Mat input_mat;
+    cv::resize(imRGB, input_mat, modelSize);
+    input_mat.convertTo(input_mat, CV_32FC3, 1. / 255.);
+    torch::Tensor tensor_image = torch::from_blob(
+        input_mat.data, {1, input_mat.rows, input_mat.cols, 3}, torch::kF32);
+    tensor_image = tensor_image.permute({0, 3, 1, 2});
+    tensor_image = tensor_image.to(at::kCUDA);
+
+    std::vector<torch::IValue> batch;
+    batch.push_back(tensor_image);
+    auto result_encoder = encoder.forward(batch);
+    batch.clear();
+    batch.push_back(result_encoder);
+    auto result_decoder = decoder.forward(batch);
+    auto tensor_result = result_decoder.toTensor().to(at::kCPU);
+    tensor_result = tensor_result.permute({0, 3, 2, 1});
+    disp = cv::Mat(modelSize.height, modelSize.width, CV_32FC1, tensor_result.data_ptr());
+    
+    cv::resize(disp, disp, cv::Size(imRGB.cols, imRGB.rows));
+    float min_disp = 1 / 100; // value recommended by Niantic
+    float max_disp = 1 / 0.1; // value recommended by Niantic
+    disp = min_disp + (max_disp - min_disp) * disp;
 }
 
 void Tracking::Reset()

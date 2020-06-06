@@ -30,25 +30,10 @@
 #include"System.h"
 #include "npy.hpp"
 
-constexpr float MIN_DEPTH = 1e-3f;
-constexpr float MAX_DEPTH = 800.0f;
-// Uses a scale factor of 5.4 due to:
-//     A. KITTI real baseline is 0.54m (training set)
-//     B. Monodepth2 NN train baseline is 0.1m
-constexpr float DEPTH_SCALE_FACTOR = 5.4f;
-constexpr int DEFAULT_IMG_WIDTH = 1241;
-constexpr int DEFAULT_IMG_HEIGHT = 376;
-static int mImageWidth;
-static int mImageHeight;
-// Experimental correction factor
-static float overestimationFactor;
-
 using namespace std;
 
 void LoadImages(const string &strSequence, vector<string> &vstrImageFilenames,
-                vector<string> &vstrImageFilenamesD, vector<double> &vTimestamps);
-
-void dread(const std::string& imageFilenameD, cv::Mat& imD);
+                vector<double> &vTimestamps);
 
 int main(int argc, char **argv)
 {
@@ -58,28 +43,10 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // Read image size
-    cv::FileStorage fSettings(argv[2], cv::FileStorage::READ);
-    if(fSettings.isOpened()) {
-        mImageWidth = fSettings["Camera.width"];
-        mImageHeight = fSettings["Camera.height"];
-        overestimationFactor = fSettings["OverestimationFactor"];
-
-        if(mImageWidth<1 || mImageHeight<1) {
-            mImageWidth = DEFAULT_IMG_WIDTH;
-            mImageHeight = DEFAULT_IMG_HEIGHT;
-        }
-
-   } else {
-        mImageWidth = DEFAULT_IMG_WIDTH;
-        mImageHeight = DEFAULT_IMG_HEIGHT;
-    }
-
     // Retrieve paths to images
     vector<string> vstrImageFilenames;
-    vector<string> vstrImageFilenamesD;
     vector<double> vTimestamps;
-    LoadImages(string(argv[3]), vstrImageFilenames, vstrImageFilenamesD, vTimestamps);
+    LoadImages(string(argv[3]), vstrImageFilenames, vTimestamps);
 
     int nImages = vstrImageFilenames.size();
 
@@ -95,12 +62,11 @@ int main(int argc, char **argv)
     cout << "Images in the sequence: " << nImages << endl << endl;
 
     // Main loop
-    cv::Mat im, imD;
+    cv::Mat im;
     for(int ni=0; ni<nImages; ni++)
     {
         // Read image from file
         im = cv::imread(vstrImageFilenames[ni],CV_LOAD_IMAGE_UNCHANGED);
-        dread(vstrImageFilenamesD[ni], imD);
         double tframe = vTimestamps[ni];
 
         if(im.empty())
@@ -109,16 +75,16 @@ int main(int argc, char **argv)
             return 1;
         }
 
-#ifdef COMPILEDWITHC11
+#ifdef COMPILEDWITHC14
         std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
 #else
         std::chrono::monotonic_clock::time_point t1 = std::chrono::monotonic_clock::now();
 #endif
 
         // Pass the image to the SLAM system
-        SLAM.TrackMonodepth(im,imD,tframe);
+        SLAM.TrackMonodepth(im,tframe);
 
-#ifdef COMPILEDWITHC11
+#ifdef COMPILEDWITHC14
         std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
 #else
         std::chrono::monotonic_clock::time_point t2 = std::chrono::monotonic_clock::now();
@@ -160,7 +126,7 @@ int main(int argc, char **argv)
 }
 
 void LoadImages(const string &strPathToSequence, vector<string> &vstrImageFilenames,
-                vector<string> &vstrImageFilenamesD, vector<double> &vTimestamps)
+                vector<double> &vTimestamps)
 {
     ifstream fTimes;
     string strPathTimeFile = strPathToSequence + "/times.txt";
@@ -183,45 +149,11 @@ void LoadImages(const string &strPathToSequence, vector<string> &vstrImageFilena
 
     const int nTimes = vTimestamps.size();
     vstrImageFilenames.resize(nTimes);
-    vstrImageFilenamesD.resize(nTimes);
 
     for(int i=0; i<nTimes; i++)
     {
         stringstream ss;
         ss << setfill('0') << setw(6) << i;
         vstrImageFilenames[i] = strPrefixLeft + ss.str() + ".png";
-        vstrImageFilenamesD[i] = strPrefixLeft + ss.str() + "_disp.npy";
     }
-}
-
-void cvMatFromNumpy(const std::string& path, cv::Mat& mat) {
-    std::vector<unsigned long> shape;
-    bool fortran_order;
-    std::vector<float> data;
-
-    shape.clear();
-    data.clear();
-    npy::LoadArrayFromNumpy(path, shape, fortran_order, data);
-    mat.create(shape[2], shape[3], CV_32F);
-    float* pMat = mat.ptr<float>();
-    for (float d : data) {
-        *pMat = d;
-        ++pMat;
-    }
-}
-
-/**
- * Converts disparity (in pixels) to depth (in meters)
- */
-void disp_to_depth(const cv::Mat& disp, cv::Mat& depth) {
-    depth = 1.0f / disp;
-    depth *= DEPTH_SCALE_FACTOR * overestimationFactor;
-    cv::threshold(depth, depth, MIN_DEPTH, 0.0, cv::THRESH_TOZERO);
-    cv::threshold(depth, depth, MAX_DEPTH, 0.0, cv::THRESH_TRUNC);
-}
-
-void dread(const std::string& imageFilenameD, cv::Mat& imD) {
-    cvMatFromNumpy(imageFilenameD, imD);
-    cv::resize(imD, imD, cv::Size(mImageWidth, mImageHeight));
-    disp_to_depth(imD, imD);
 }

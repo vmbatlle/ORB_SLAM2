@@ -30,13 +30,19 @@ Camera.RGB: 1
 # Close/Far threshold. Baseline times.
 ThDepth: 40
 
+# Monodepth2 model files
+Monodepth.EncoderModel: "Thirdparty/monodepth2/models/mono+stereo_1024x320/encoder.cpt"
+Monodepth.DecoderModel: "Thirdparty/monodepth2/models/mono+stereo_1024x320/depth.cpt"
+Monodepth.ModelWidth: 1024
+Monodepth.ModelHeight: 320
+
 # Valid/Invalid threshold. In meters.
-MinThDepth: 7
-MaxThDepth: 800
+Monodepth.MinThDepth: 7
+Monodepth.MaxThDepth: 800
 
 # Deptmap values factor
 DepthMapFactor: 1.0
-OverestimationFactor: 1.0 # 0.9738404 # 0.932636313
+Monodepth.OverestimationFactor: 1.0 # 0.9738404 # 0.932636313
 
 #--------------------------------------------------------------------------------------------
 # ORB Parameters

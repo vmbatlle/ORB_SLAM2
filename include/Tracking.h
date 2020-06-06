@@ -24,6 +24,8 @@
 
 #include<opencv2/core/core.hpp>
 #include<opencv2/features2d/features2d.hpp>
+#include<torch/script.h>
+#include<torch/torch.h>
 
 #include"Viewer.h"
 #include"FrameDrawer.h"
@@ -60,7 +62,7 @@ public:
     // Preprocess the input and call Track(). Extract features and performs stereo matching.
     cv::Mat GrabImageStereo(const cv::Mat &imRectLeft,const cv::Mat &imRectRight, const double &timestamp);
     cv::Mat GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp);
-    cv::Mat GrabImageMonodepth(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp);
+    cv::Mat GrabImageMonodepth(const cv::Mat &imRGB, const double &timestamp);
     cv::Mat GrabImageMonocular(const cv::Mat &im, const double &timestamp);
 
     void SetLocalMapper(LocalMapping* pLocalMapper);
@@ -113,6 +115,15 @@ public:
 
     // True if local mapping is deactivated and we are performing only localization
     bool mbOnlyTracking;
+
+    // Monodepth models
+    torch::jit::script::Module encoder;
+    torch::jit::script::Module decoder;
+    cv::Size modelSize;
+    float overestimationFactor;
+
+    // Forwards a source image to obtain the CNN output as disparity map
+    void forwardCNN(const cv::Mat& imRGB, cv::Mat& disp);
 
     void Reset();
 
