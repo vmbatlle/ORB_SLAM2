@@ -47,6 +47,10 @@ public:
 
     // Draw last processed frame.
     cv::Mat DrawFrame();
+    void DrawMonodepth(const cv::Mat& disp, cv::Mat& im);
+
+    template <typename T>
+    T percentile(const cv::Mat& m, float q);
 
 protected:
 
@@ -56,7 +60,7 @@ protected:
     cv::Mat mIm;
     int N;
     vector<cv::KeyPoint> mvCurrentKeys;
-    vector<bool> mvbMap, mvbVO;
+    vector<bool> mvbMap, mvbVO, mvbDepth;
     bool mbOnlyTracking;
     int mnTracked, mnTrackedVO;
     vector<cv::KeyPoint> mvIniKeys;

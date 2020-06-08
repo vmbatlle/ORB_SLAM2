@@ -156,6 +156,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
         minThDepth = (float)fSettings["Monodepth.MinThDepth"];
         maxThDepth = (float)fSettings["Monodepth.MaxThDepth"];
         overestimationFactor = (float)fSettings["Monodepth.OverestimationFactor"];
+        overestimationFactor = overestimationFactor > 0 ? overestimationFactor : 1.0;
     }
 
 }
@@ -281,20 +282,16 @@ cv::Mat Tracking::GrabImageMonodepth(const cv::Mat &imRGB, const double &timesta
             cvtColor(imBGR,imBGR,CV_BGRA2BGR);
     }
 
-    cv::Mat imDepth;
-    forwardCNN(imBGR, imDepth); // get predicted DISPARITY
-    imDepth = 1.0f / imDepth; // convert disparity to DEPTH
+    forwardCNN(imBGR, mImDepth); // get predicted DISPARITY
+    mImDepth = 1.0f / mImDepth; // convert disparity to DEPTH
     // Uses a scale factor of 5.4 due to:
     //     A. KITTI real baseline is 0.54m (training set)
     //     B. Monodepth2 NN train baseline is 0.1m
-    imDepth *= 5.4f * overestimationFactor;
-    cv::threshold(imDepth, imDepth, 1e-3, 0.0, cv::THRESH_TOZERO); // value recommended by Niantic
-    cv::threshold(imDepth, imDepth, 800.0, 0.0, cv::THRESH_TRUNC); // value recommended by Niantic
+    mImDepth *= 5.4f * overestimationFactor;
+    cv::threshold(mImDepth, mImDepth, 1e-3, 0.0, cv::THRESH_TOZERO); // value recommended by Niantic
+    cv::threshold(mImDepth, mImDepth, 800.0, 0.0, cv::THRESH_TRUNC); // value recommended by Niantic
 
-    if((fabs(mDepthMapFactor-1.0f)>1e-5) || imDepth.type()!=CV_32F)
-        imDepth.convertTo(imDepth,CV_32F,mDepthMapFactor);
-
-    mCurrentFrame = Frame(mImGray,imDepth,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,minThDepth,maxThDepth);
+    mCurrentFrame = Frame(mImGray,mImDepth,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,minThDepth,maxThDepth);
 
     Track();
 
@@ -1570,7 +1567,7 @@ bool Tracking::Relocalization()
 
 void Tracking::forwardCNN(const cv::Mat& imRGB, cv::Mat& disp) {
     cv::Mat input_mat;
-    cv::resize(imRGB, input_mat, modelSize);
+    cv::resize(imRGB, input_mat, modelSize, 0.0, 0.0, CV_INTER_LANCZOS4);
     input_mat.convertTo(input_mat, CV_32FC3, 1. / 255.);
     torch::Tensor tensor_image = torch::from_blob(
         input_mat.data, {1, input_mat.rows, input_mat.cols, 3}, torch::kF32);

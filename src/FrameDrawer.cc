@@ -41,7 +41,7 @@ cv::Mat FrameDrawer::DrawFrame()
     vector<cv::KeyPoint> vIniKeys; // Initialization: KeyPoints in reference frame
     vector<int> vMatches; // Initialization: correspondeces with reference keypoints
     vector<cv::KeyPoint> vCurrentKeys; // KeyPoints in current frame
-    vector<bool> vbVO, vbMap; // Tracked MapPoints in current frame
+    vector<bool> vbVO, vbMap, vbDepth; // Tracked MapPoints in current frame
     int state; // Tracking state
 
     //Copy variables within scoped mutex
@@ -64,6 +64,7 @@ cv::Mat FrameDrawer::DrawFrame()
             vCurrentKeys = mvCurrentKeys;
             vbVO = mvbVO;
             vbMap = mvbMap;
+            vbDepth = mvbDepth;
         }
         else if(mState==Tracking::LOST)
         {
@@ -71,8 +72,8 @@ cv::Mat FrameDrawer::DrawFrame()
         }
     } // destroy scoped mutex -> release mutex
 
-    if(im.channels()<3) //this should be always true
-        cvtColor(im,im,CV_GRAY2BGR);
+    // if(im.channels()<3) //this should be always true
+    //     cvtColor(im,im,CV_GRAY2BGR);
 
     //Draw
     if(state==Tracking::NOT_INITIALIZED) //INITIALIZING
@@ -105,8 +106,13 @@ cv::Mat FrameDrawer::DrawFrame()
                 // This is a match to a MapPoint in the map
                 if(vbMap[i])
                 {
-                    cv::rectangle(im,pt1,pt2,cv::Scalar(0,255,0));
-                    cv::circle(im,vCurrentKeys[i].pt,2,cv::Scalar(0,255,0),-1);
+                    cv::Scalar color;
+                    if(vbDepth[i])
+                        color = cv::Scalar(0,255,0);
+                    else
+                        color = cv::Scalar(0,0,255);
+                    cv::rectangle(im,pt1,pt2,color);
+                    cv::circle(im,vCurrentKeys[i].pt,2,color,-1);
                     mnTracked++;
                 }
                 else // This is match to a "visual odometry" MapPoint created in the last frame
@@ -164,14 +170,50 @@ void FrameDrawer::DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText)
 
 }
 
+/**
+ * Returns the q-th percentile of the matrix
+ */
+template <typename T>
+T FrameDrawer::percentile(const cv::Mat& m, float q) {
+    cv::Mat mat = m.clone();
+    int nel = mat.rows * mat.cols;
+    int nth = nel * q;
+    std::nth_element(mat.begin<T>(), mat.begin<T>() + nth, mat.end<T>());
+    return *(mat.begin<T>() + nth);
+}
+
+/**
+ * Shows heatmap of the disparity, normalized to [0.0, 1.0].
+ */
+void FrameDrawer::DrawMonodepth(const cv::Mat& disp, cv::Mat& im) {
+    double vmin;
+    cv::minMaxLoc(disp, &vmin, nullptr);
+    float vmax = percentile<float>(disp, 0.95);
+
+    disp.convertTo(im, CV_8UC1, 255 / (vmax - vmin), vmin);
+    cv::applyColorMap(im, im, cv::COLORMAP_MAGMA);
+}
+
 void FrameDrawer::Update(Tracking *pTracker)
 {
     unique_lock<mutex> lock(mMutex);
     pTracker->mImGray.copyTo(mIm);
+    cv::cvtColor(mIm, mIm, CV_GRAY2BGR);
+
+    if (pTracker->mSensor==System::MONODEPTH) {
+        // Draw disparity map
+        cv::Mat mDisp;
+        mDisp = pTracker->mImDepth.clone();
+        mDisp = 5.4f / mDisp;
+        DrawMonodepth(mDisp, mDisp);
+        mIm.push_back(mDisp);
+    }
+
     mvCurrentKeys=pTracker->mCurrentFrame.mvKeys;
     N = mvCurrentKeys.size();
     mvbVO = vector<bool>(N,false);
     mvbMap = vector<bool>(N,false);
+    mvbDepth = vector<bool>(N,false);
     mbOnlyTracking = pTracker->mbOnlyTracking;
 
 
@@ -193,6 +235,9 @@ void FrameDrawer::Update(Tracking *pTracker)
                         mvbMap[i]=true;
                     else
                         mvbVO[i]=true;
+
+                    if(pTracker->mCurrentFrame.mvDepth[i] >= 0)
+                        mvbDepth[i]=true;
                 }
             }
         }
