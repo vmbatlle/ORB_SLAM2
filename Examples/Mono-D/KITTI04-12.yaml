@@ -38,11 +38,11 @@ Monodepth.ModelHeight: 320
 
 # Valid/Invalid threshold. In meters.
 Monodepth.MinThDepth: 7 # 7 # 3.5
-Monodepth.MaxThDepth: 800
+Monodepth.MaxThDepth: 20
 
 # Deptmap values factor
 DepthMapFactor: 1.0
-Monodepth.OverestimationFactor: 1.0 # 0.932636313
+Monodepth.OverestimationFactor: 0.96 # 0.932636313
 
 #--------------------------------------------------------------------------------------------
 # ORB Parameters
