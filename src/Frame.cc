@@ -170,9 +170,9 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeSt
     AssignFeaturesToGrid();
 }
 
-Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth, const float &minThDepth, const float &maxThDepth)
+Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, std::future<void> &futDepth, float ovFactor, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth, const float &minThDepth, const float &maxThDepth)
     :mpORBvocabulary(voc),mpORBextractorLeft(extractor),mpORBextractorRight(static_cast<ORBextractor*>(NULL)),
-     mTimeStamp(timeStamp), mK(K.clone()),mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth), mMinThDepth(minThDepth), mMaxThDepth(maxThDepth)
+     mTimeStamp(timeStamp), mK(K.clone()),mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth), mMinThDepth(minThDepth), mMaxThDepth(maxThDepth), overestimationFactor(ovFactor)
 {
     // Copied from RGB-D constructor
 
@@ -198,6 +198,7 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeSt
 
     UndistortKeyPoints();
 
+    futDepth.wait();
     ComputeStereoFromMonodepth(imDepth);
 
     mvpMapPoints = vector<MapPoint*>(N,static_cast<MapPoint*>(NULL));
@@ -733,7 +734,11 @@ void Frame::ComputeStereoFromMonodepth(const cv::Mat &imDepth)
         const float &v = kp.pt.y;
         const float &u = kp.pt.x;
 
-        const float d = imDepth.at<float>(v,u);
+        float d = imDepth.at<float>(v,u);
+        // Uses a scale factor of 5.4 due to:
+        //     A. KITTI real baseline is 0.54m (training set)
+        //     B. Monodepth2 NN train baseline is 0.1m
+        d = 5.4f * overestimationFactor / d; // convert disparity to DEPTH
 
         if(d>mMinThDepth && d<mMaxThDepth)
         {

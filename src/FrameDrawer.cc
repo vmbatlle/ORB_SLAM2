@@ -204,7 +204,7 @@ void FrameDrawer::Update(Tracking *pTracker)
         // Draw disparity map
         cv::Mat mDisp;
         mDisp = pTracker->mImDepth.clone();
-        mDisp = 5.4f / mDisp;
+        // mDisp = 5.4f / mDisp;
         DrawMonodepth(mDisp, mDisp);
         mIm.push_back(mDisp);
     }

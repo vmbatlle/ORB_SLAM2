@@ -281,17 +281,9 @@ cv::Mat Tracking::GrabImageMonodepth(const cv::Mat &imRGB, const double &timesta
         else
             cvtColor(imBGR,imBGR,CV_BGRA2BGR);
     }
+    std::future<void> fImDepth = std::async(std::launch::async, &ORB_SLAM2::Tracking::forwardCNN, this, std::ref(imBGR), std::ref(mImDepth)); // get predicted DISPARITY
 
-    forwardCNN(imBGR, mImDepth); // get predicted DISPARITY
-    mImDepth = 1.0f / mImDepth; // convert disparity to DEPTH
-    // Uses a scale factor of 5.4 due to:
-    //     A. KITTI real baseline is 0.54m (training set)
-    //     B. Monodepth2 NN train baseline is 0.1m
-    mImDepth *= 5.4f * overestimationFactor;
-    cv::threshold(mImDepth, mImDepth, 1e-3, 0.0, cv::THRESH_TOZERO); // value recommended by Niantic
-    cv::threshold(mImDepth, mImDepth, 800.0, 0.0, cv::THRESH_TRUNC); // value recommended by Niantic
-
-    mCurrentFrame = Frame(mImGray,mImDepth,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,minThDepth,maxThDepth);
+    mCurrentFrame = Frame(mImGray,mImDepth,fImDepth,overestimationFactor,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,minThDepth,maxThDepth);
 
     Track();
 
@@ -1134,13 +1126,15 @@ void Tracking::CreateNewKeyFrame()
     mpReferenceKF = pKF;
     mCurrentFrame.mpReferenceKF = pKF;
 
-    if(mSensor!=System::MONOCULAR)
+    if(mSensor!=System::MONOCULAR && mSensor!=System::MONODEPTH)
     {
         mCurrentFrame.UpdatePoseMatrices();
 
         // We sort points by the measured depth by the stereo/RGBD sensor.
         // We create all those MapPoints whose depth < mThDepth.
         // If there are less than 100 close points we create the 100 closest.
+        // int minPoints = mSensor==System::MONODEPTH ? 800 : 100;
+        int minPoints = 100;
         vector<pair<float,int> > vDepthIdx;
         vDepthIdx.reserve(mCurrentFrame.N);
         for(int i=0; i<mCurrentFrame.N; i++)
@@ -1190,7 +1184,7 @@ void Tracking::CreateNewKeyFrame()
                     nPoints++;
                 }
 
-                if(vDepthIdx[j].first>mThDepth && nPoints>100)
+                if(vDepthIdx[j].first>mThDepth && nPoints>minPoints)
                     break;
             }
         }
@@ -1584,10 +1578,11 @@ void Tracking::forwardCNN(const cv::Mat& imRGB, cv::Mat& disp) {
     tensor_result = tensor_result.permute({0, 3, 2, 1});
     disp = cv::Mat(modelSize.height, modelSize.width, CV_32FC1, tensor_result.data_ptr());
     
-    cv::resize(disp, disp, cv::Size(imRGB.cols, imRGB.rows));
     float min_disp = 1 / 100; // value recommended by Niantic
     float max_disp = 1 / 0.1; // value recommended by Niantic
     disp = min_disp + (max_disp - min_disp) * disp;
+    
+    cv::resize(disp, disp, cv::Size(imRGB.cols, imRGB.rows));
 }
 
 void Tracking::Reset()
