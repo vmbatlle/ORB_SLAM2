@@ -28,6 +28,8 @@
 #include<opencv2/core/core.hpp>
 
 #include"System.h"
+vector<float> ORB_SLAM2::Tracking::vTimesMonodepth;
+vector<float> ORB_SLAM2::Frame::vTimesORB;
 #include "npy.hpp"
 
 using namespace std;
@@ -56,6 +58,8 @@ int main(int argc, char **argv)
     // Vector for tracking time statistics
     vector<float> vTimesTrack;
     vTimesTrack.resize(nImages);
+    ORB_SLAM2::Tracking::vTimesMonodepth.resize(nImages);
+    ORB_SLAM2::Frame::vTimesORB.resize(nImages);
 
     cout << endl << "-------" << endl;
     cout << "Start processing sequence ..." << endl;
@@ -118,6 +122,28 @@ int main(int argc, char **argv)
     cout << "-------" << endl << endl;
     cout << "median tracking time: " << vTimesTrack[nImages/2] << endl;
     cout << "mean tracking time: " << totaltime/nImages << endl;
+
+    // Monodepth2 time statistics
+    sort(ORB_SLAM2::Tracking::vTimesMonodepth.begin(),ORB_SLAM2::Tracking::vTimesMonodepth.end());
+    totaltime = 0;
+    for(int ni=0; ni<nImages; ni++)
+    {
+        totaltime+=ORB_SLAM2::Tracking::vTimesMonodepth[ni];
+    }
+    cout << "-------" << endl << endl;
+    cout << "median Monodepth2 time: " << ORB_SLAM2::Tracking::vTimesMonodepth[nImages/2] << endl;
+    cout << "mean Monodepth2 time: " << totaltime/nImages << endl;
+
+    // ORB time statistics
+    sort(ORB_SLAM2::Frame::vTimesORB.begin(),ORB_SLAM2::Frame::vTimesORB.end());
+    totaltime = 0;
+    for(int ni=0; ni<nImages; ni++)
+    {
+        totaltime+=ORB_SLAM2::Frame::vTimesORB[ni];
+    }
+    cout << "-------" << endl << endl;
+    cout << "median ORB time: " << ORB_SLAM2::Frame::vTimesORB[nImages/2] << endl;
+    cout << "mean ORB time: " << totaltime/nImages << endl;
 
     // Save camera trajectory
     SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");    

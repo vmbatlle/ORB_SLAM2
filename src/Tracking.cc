@@ -20,6 +20,7 @@
 
 
 #include "Tracking.h"
+vector<float> ORB_SLAM2::Tracking::vTimesMonodepth;
 
 #include<opencv2/core/core.hpp>
 #include<opencv2/features2d/features2d.hpp>
@@ -281,7 +282,20 @@ cv::Mat Tracking::GrabImageMonodepth(const cv::Mat &imRGB, const double &timesta
         else
             cvtColor(imBGR,imBGR,CV_BGRA2BGR);
     }
+    #ifdef COMPILEDWITHC14
+            std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
+    #else
+            std::chrono::monotonic_clock::time_point t1 = std::chrono::monotonic_clock::now();
+    #endif
     std::future<void> fImDepth = std::async(std::launch::async, &ORB_SLAM2::Tracking::forwardCNN, this, std::ref(imBGR), std::ref(mImDepth)); // get predicted DISPARITY
+    #ifdef COMPILEDWITHC14
+        std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
+    #else
+        std::chrono::monotonic_clock::time_point t2 = std::chrono::monotonic_clock::now();
+    #endif
+    double ttrack= std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
+    static int ni = 0;
+    vTimesMonodepth[ni++]=ttrack;
 
     mCurrentFrame = Frame(mImGray,mImDepth,fImDepth,overestimationFactor,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,minThDepth,maxThDepth);
 
@@ -1581,7 +1595,7 @@ void Tracking::forwardCNN(const cv::Mat& imRGB, cv::Mat& disp) {
     float min_disp = 1 / 100; // value recommended by Niantic
     float max_disp = 1 / 0.1; // value recommended by Niantic
     disp = min_disp + (max_disp - min_disp) * disp;
-    
+
     cv::resize(disp, disp, cv::Size(imRGB.cols, imRGB.rows));
 }
 

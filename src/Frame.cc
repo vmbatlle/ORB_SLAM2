@@ -19,6 +19,7 @@
 */
 
 #include "Frame.h"
+vector<float> ORB_SLAM2::Frame::vTimesORB;
 #include "Converter.h"
 #include "ORBmatcher.h"
 #include <thread>
@@ -188,8 +189,21 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, std::future<void> &f
     mvLevelSigma2 = mpORBextractorLeft->GetScaleSigmaSquares();
     mvInvLevelSigma2 = mpORBextractorLeft->GetInverseScaleSigmaSquares();
 
+    #ifdef COMPILEDWITHC14
+            std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
+    #else
+            std::chrono::monotonic_clock::time_point t1 = std::chrono::monotonic_clock::now();
+    #endif
     // ORB extraction
     ExtractORB(0,imGray);
+    #ifdef COMPILEDWITHC14
+        std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
+    #else
+        std::chrono::monotonic_clock::time_point t2 = std::chrono::monotonic_clock::now();
+    #endif
+    double ttrack= std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
+    static int ni = 0;
+    vTimesORB[ni++]=ttrack;
 
     N = mvKeys.size();
 
